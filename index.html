@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>聽音拼單字 - 數量絕對正確版</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+        :root { --primary: #3498db; --success: #2ecc71; --accent: #f1c40f; --text: #2c3e50; }
+        body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background-color: #f0f7fa; display: flex; flex-direction: column; align-items: center; padding: 15px; margin: 0; }
+        .card { background: white; padding: 1.5rem; border-radius: 20px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); width: 100%; max-width: 450px; text-align: center; box-sizing: border-box; }
+        
+        /* 校正頁面 */
+        #edit-section { display: none; }
+        .word-item { display: flex; align-items: center; margin-bottom: 8px; gap: 8px; }
+        .word-item input { flex-grow: 1; padding: 10px; font-size: 1.1rem; border: 1px solid #ddd; border-radius: 8px; }
+        .btn-edit { padding: 8px 12px; background: var(--primary); color: white; border: none; border-radius: 8px; }
+
+        /* 測驗頁面顯示區 */
+        #quiz-section { display: none; }
+        #display-container {
+            width: 100%;
+            margin: 2rem 0;
+            min-height: 5rem;
+            display: flex;
+            flex-wrap: wrap; /* 萬一真的太長會自動換行，不擠在一起 */
+            justify-content: center;
+            gap: 8px; /* 每個底線之間的固定間距 */
+        }
+        
+        /* 每個字母的獨立方塊樣式 */
+        .char-box {
+            border-bottom: 4px solid var(--text);
+            width: 25px;
+            height: 45px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            font-family: 'Arial', sans-serif;
+            font-weight: bold;
+        }
+        
+        /* 大按鈕樣式 */
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .btn-main { border: none; border-radius: 15px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 15px; }
+        .btn-audio { grid-column: span 2; background: var(--accent); color: #444; }
+        .btn-audio .icon { font-size: 4rem; } 
+        .btn-nav { background: var(--primary); color: white; }
+        .btn-toggle { grid-column: span 2; background: var(--success); color: white; }
+        .icon { font-size: 2.5rem; margin-bottom: 5px; }
+        .label { font-size: 1rem; font-weight: bold; }
+
+        .btn-add { width: 100%; margin: 10px 0; padding: 12px; background: white; color: var(--primary); border: 2px dashed var(--primary); border-radius: 10px; }
+        .btn-confirm { width: 100%; margin-top: 15px; padding: 18px; background: var(--success); color: white; font-size: 1.3rem; border: none; border-radius: 15px; box-shadow: 0 4px 0 #27ae60; }
+    </style>
+</head>
+<body>
+
+<div class="card" id="upload-section">
+    <h2>📷 第一步：上傳照片</h2>
+    <input type="file" id="image-input" accept="image/*">
+    <div id="status" style="margin-top:20px; color:#666;">請選取單字圖片</div>
+</div>
+
+<div class="card" id="edit-section">
+    <h2>✏️ 第二步：確認單字</h2>
+    <div id="word-list" style="max-height: 300px; overflow-y: auto;"></div>
+    <button class="btn-add" onclick="addNewWord()">➕ 手動增加</button>
+    <button class="btn-confirm" onclick="startQuiz()">確認無誤，開始測驗</button>
+</div>
+
+<div class="card" id="quiz-section">
+    <div id="quiz-counter" style="text-align: right; color: #999; font-weight: bold;">1 / 1</div>
+    
+    <div id="display-container"></div>
+    
+    <div class="controls">
+        <button class="btn-main btn-audio" onclick="playCurrentWord()">
+            <span class="icon">📢</span><span class="label">發音</span>
+        </button>
+        <button class="btn-main btn-nav" onclick="prevWord()">
+            <span class="icon">⬅️</span><span class="label">上一題</span>
+        </button>
+        <button class="btn-main btn-nav" onclick="nextWord()">
+            <span class="icon">➡️</span><span class="label">下一題</span>
+        </button>
+        <button class="btn-main btn-toggle" id="btn-toggle" onclick="toggleAnswer()">
+            <span class="icon" id="eye-icon">👁️</span><span class="label" id="toggle-label">顯示</span>
+        </button>
+    </div>
+    <button style="margin-top:25px; background:none; border:none; color:#aaa; text-decoration:underline;" onclick="location.reload()">重新上傳</button>
+</div>
+
+<script>
+    let words = [];
+    let currentIndex = 0;
+    let isShowing = false;
+
+    // --- OCR ---
+    document.getElementById('image-input').addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        document.getElementById('status').innerText = "辨識中...";
+        try {
+            const { data: { text } } = await Tesseract.recognize(file, 'eng');
+            words = text.split(/\s+/).filter(w => w.length >= 2 && /^[a-zA-Z-]+$/.test(w));
+            renderWordList();
+            document.getElementById('upload-section').style.display = 'none';
+            document.getElementById('edit-section').style.display = 'block';
+        } catch (err) { alert(err.message); }
+    });
+
+    function renderWordList() {
+        const list = document.getElementById('word-list');
+        list.innerHTML = '';
+        words.forEach((word, index) => {
+            const div = document.createElement('div');
+            div.className = 'word-item';
+            div.innerHTML = `<input type="text" value="${word}" id="input-${index}" disabled><button class="btn-edit" id="btn-edit-${index}" onclick="toggleEdit(${index})">修正</button>`;
+            list.appendChild(div);
+        });
+    }
+
+    function toggleEdit(index) {
+        const input = document.getElementById(`input-${index}`);
+        const btn = document.getElementById(`btn-edit-${index}`);
+        if (input.disabled) {
+            input.disabled = false; input.focus();
+            btn.innerText = "完成"; btn.style.backgroundColor = "#2ecc71";
+        } else {
+            input.disabled = true; words[index] = input.value.trim();
+            btn.innerText = "修正"; btn.style.backgroundColor = "#3498db";
+        }
+    }
+
+    function addNewWord() {
+        const newWord = prompt("請輸入單字：");
+        if (newWord?.trim()) {
+            words.push(newWord.trim());
+            renderWordList();
+        }
+    }
+
+    // --- Quiz ---
+    function startQuiz() {
+        const allInputs = document.querySelectorAll('.word-item input');
+        words = Array.from(allInputs).map(i => i.value.trim()).filter(w => w !== "");
+        if (words.length === 0) return;
+        document.getElementById('edit-section').style.display = 'none';
+        document.getElementById('quiz-section').style.display = 'block';
+        currentIndex = 0;
+        initQuizWord();
+    }
+
+    function initQuizWord() {
+        isShowing = false;
+        updateToggleUI();
+        document.getElementById('quiz-counter').innerText = `${currentIndex + 1} / ${words.length}`;
+        updateDisplay();
+    }
+
+    function updateDisplay() {
+        const container = document.getElementById('display-container');
+        container.innerHTML = '';
+        const targetWord = words[currentIndex];
+        
+        // 針對 classroom 這種長單字，如果總寬度太窄就縮小方塊
+        const boxWidth = targetWord.length > 10 ? 20 : 30;
+
+        for (let i = 0; i < targetWord.length; i++) {
+            const box = document.createElement('div');
+            box.className = 'char-box';
+            box.style.width = boxWidth + 'px';
+            
+            if (isShowing) {
+                box.innerText = targetWord[i];
+                box.style.borderBottomColor = "transparent";
+                box.style.color = "var(--success)";
+            } else {
+                box.innerText = "";
+                box.style.borderBottomColor = "var(--text)";
+            }
+            container.appendChild(box);
+        }
+    }
+
+    function toggleAnswer() {
+        isShowing = !isShowing;
+        updateToggleUI();
+        updateDisplay();
+    }
+
+    function updateToggleUI() {
+        document.getElementById('eye-icon').innerText = isShowing ? "🙈" : "👁️"; 
+        document.getElementById('toggle-label').innerText = isShowing ? "隱藏" : "顯示";
+    }
+
+    function playCurrentWord() {
+        const utterance = new SpeechSynthesisUtterance(words[currentIndex]);
+        utterance.lang = 'en-US';
+        utterance.rate = 0.7;
+        window.speechSynthesis.speak(utterance);
+    }
+
+    function nextWord() { if (currentIndex < words.length - 1) { currentIndex++; initQuizWord(); } }
+    function prevWord() { if (currentIndex > 0) { currentIndex--; initQuizWord(); } }
+</script>
+
+</body>
+</html>
