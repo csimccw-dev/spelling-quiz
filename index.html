@@ -6,7 +6,7 @@
     <title>聽音拼單字</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <style>
-        :root { --primary: #3498db; --success: #2ecc71; --accent: #f1c40f; --text: #2c3e50; }
+        :root { --primary: #3498db; --success: #2ecc71; --accent: #f1c40f; --text: #2c3e50; --danger: #e74c3c; }
         body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background-color: #f0f7fa; display: flex; flex-direction: column; align-items: center; padding: 15px; margin: 0; }
         .card { background: white; padding: 1.5rem; border-radius: 20px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); width: 100%; max-width: 450px; text-align: center; box-sizing: border-box; }
         
@@ -14,9 +14,8 @@
         #edit-section { display: none; }
         .word-item { display: flex; align-items: center; margin-bottom: 8px; gap: 8px; }
         .word-item input { flex-grow: 1; padding: 10px; font-size: 1.1rem; border: 1px solid #ddd; border-radius: 8px; }
-        .btn-edit { padding: 8px 12px; background: var(--primary); color: white; border: none; border-radius: 8px; }
-        /* 新增刪除按鈕樣式 */
-        .btn-delete { padding: 8px 12px; background: #e74c3c; color: white; border: none
+        .btn-edit { padding: 8px 12px; background: var(--primary); color: white; border: none; border-radius: 8px; cursor: pointer; }
+        .btn-delete { padding: 8px 12px; background: var(--danger); color: white; border: none; border-radius: 8px; cursor: pointer; }
 
         /* 測驗頁面顯示區 */
         #quiz-section { display: none; }
@@ -53,8 +52,8 @@
         .icon { font-size: 2.5rem; margin-bottom: 5px; }
         .label { font-size: 1rem; font-weight: bold; }
 
-        .btn-add { width: 100%; margin: 10px 0; padding: 12px; background: white; color: var(--primary); border: 2px dashed var(--primary); border-radius: 10px; }
-        .btn-confirm { width: 100%; margin-top: 15px; padding: 18px; background: var(--success); color: white; font-size: 1.3rem; border: none; border-radius: 15px; box-shadow: 0 4px 0 #27ae60; }
+        .btn-add { width: 100%; margin: 10px 0; padding: 12px; background: white; color: var(--primary); border: 2px dashed var(--primary); border-radius: 10px; cursor: pointer; }
+        .btn-confirm { width: 100%; margin-top: 15px; padding: 18px; background: var(--success); color: white; font-size: 1.3rem; border: none; border-radius: 15px; box-shadow: 0 4px 0 #27ae60; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -91,7 +90,7 @@
             <span class="icon" id="eye-icon">👁️</span><span class="label" id="toggle-label">顯示</span>
         </button>
     </div>
-    <button style="margin-top:25px; background:none; border:none; color:#aaa; text-decoration:underline;" onclick="location.reload()">重新上傳</button>
+    <button style="margin-top:25px; background:none; border:none; color:#aaa; text-decoration:underline; cursor: pointer;" onclick="location.reload()">重新上傳</button>
 </div>
 
 <script>
@@ -119,7 +118,6 @@
         words.forEach((word, index) => {
             const div = document.createElement('div');
             div.className = 'word-item';
-            // 在原本的修正按鈕後方，加入刪除按鈕
             div.innerHTML = `
                 <input type="text" value="${word}" id="input-${index}" disabled>
                 <button class="btn-edit" id="btn-edit-${index}" onclick="toggleEdit(${index})">修正</button>
@@ -129,24 +127,15 @@
         });
     }
 
-    // 新增刪除單字的函數
-    function deleteWord(index) {
-        // 加入確認對話框避免誤觸
-        if (confirm("確定要刪除這個單字嗎？")) {
-            words.splice(index, 1); // 從陣列中移除該單字
-            renderWordList();       // 重新渲染列表
-        }
-    }
-
     function toggleEdit(index) {
         const input = document.getElementById(`input-${index}`);
         const btn = document.getElementById(`btn-edit-${index}`);
         if (input.disabled) {
             input.disabled = false; input.focus();
-            btn.innerText = "完成"; btn.style.backgroundColor = "#2ecc71";
+            btn.innerText = "完成"; btn.style.backgroundColor = "var(--success)";
         } else {
             input.disabled = true; words[index] = input.value.trim();
-            btn.innerText = "修正"; btn.style.backgroundColor = "#3498db";
+            btn.innerText = "修正"; btn.style.backgroundColor = "var(--primary)";
         }
     }
 
@@ -154,6 +143,13 @@
         const newWord = prompt("請輸入單字：");
         if (newWord?.trim()) {
             words.push(newWord.trim());
+            renderWordList();
+        }
+    }
+
+    function deleteWord(index) {
+        if (confirm("確定要刪除這個單字嗎？")) {
+            words.splice(index, 1);
             renderWordList();
         }
     }
