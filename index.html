@@ -15,6 +15,8 @@
         .word-item { display: flex; align-items: center; margin-bottom: 8px; gap: 8px; }
         .word-item input { flex-grow: 1; padding: 10px; font-size: 1.1rem; border: 1px solid #ddd; border-radius: 8px; }
         .btn-edit { padding: 8px 12px; background: var(--primary); color: white; border: none; border-radius: 8px; }
+        /* 新增刪除按鈕樣式 */
+        .btn-delete { padding: 8px 12px; background: #e74c3c; color: white; border: none
 
         /* 測驗頁面顯示區 */
         #quiz-section { display: none; }
@@ -117,9 +119,23 @@
         words.forEach((word, index) => {
             const div = document.createElement('div');
             div.className = 'word-item';
-            div.innerHTML = `<input type="text" value="${word}" id="input-${index}" disabled><button class="btn-edit" id="btn-edit-${index}" onclick="toggleEdit(${index})">修正</button>`;
+            // 在原本的修正按鈕後方，加入刪除按鈕
+            div.innerHTML = `
+                <input type="text" value="${word}" id="input-${index}" disabled>
+                <button class="btn-edit" id="btn-edit-${index}" onclick="toggleEdit(${index})">修正</button>
+                <button class="btn-delete" onclick="deleteWord(${index})">刪除</button>
+            `;
             list.appendChild(div);
         });
+    }
+
+    // 新增刪除單字的函數
+    function deleteWord(index) {
+        // 加入確認對話框避免誤觸
+        if (confirm("確定要刪除這個單字嗎？")) {
+            words.splice(index, 1); // 從陣列中移除該單字
+            renderWordList();       // 重新渲染列表
+        }
     }
 
     function toggleEdit(index) {
