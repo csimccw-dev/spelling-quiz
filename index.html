@@ -27,16 +27,19 @@
         #display-container { width: 100%; margin: 2rem 0; min-height: 5rem; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
         .char-box { border-bottom: 4px solid var(--text); width: 25px; height: 45px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; font-family: 'Arial', sans-serif; font-weight: bold; }
         
-        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .speed-control { grid-column: span 2; display: flex; align-items: center; justify-content: center; gap: 10px; background: #f8f9fa; padding: 10px 15px; border-radius: 15px; border: 1px solid #eee; }
         .speed-control input[type=range] { flex-grow: 1; cursor: pointer; }
-        .btn-main { border: none; border-radius: 15px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 15px; }
-        .btn-audio { grid-column: span 2; background: var(--accent); color: #444; }
-        .btn-audio .icon { font-size: 4rem; } 
+        
+        .btn-main { border: none; border-radius: 15px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 12px; }
+        .btn-audio-us { background: #f39c12; color: white; }
+        .btn-audio-gb { background: #d35400; color: white; }
+        .btn-audio-us .icon, .btn-audio-gb .icon { font-size: 2rem; }
+        
         .btn-nav { background: var(--primary); color: white; }
         .btn-toggle { grid-column: span 2; background: var(--success); color: white; }
-        .icon { font-size: 2.5rem; margin-bottom: 5px; }
-        .label { font-size: 1rem; font-weight: bold; }
+        .icon { font-size: 2rem; margin-bottom: 3px; }
+        .label { font-size: 0.95rem; font-weight: bold; }
 
         .btn-add { width: 100%; margin: 10px 0; padding: 12px; background: white; color: var(--primary); border: 2px dashed var(--primary); border-radius: 10px; cursor: pointer; }
         .btn-confirm { width: 100%; margin-top: 15px; padding: 18px; background: var(--success); color: white; font-size: 1.3rem; border: none; border-radius: 15px; box-shadow: 0 4px 0 #27ae60; cursor: pointer; }
@@ -45,7 +48,7 @@
 <body>
 
 <div class="card" id="upload-section">
-    <h2>📷 第一步：上傳照片 <span style="font-size: 0.8rem; color: #aaa;">v0.8</span></h2>
+    <h2>📷 第一步：上傳照片 <span style="font-size: 0.8rem; color: #aaa;">v0.9</span></h2>
     <input type="file" id="image-input" accept="image/*">
     
     <div id="preview-container">
@@ -72,14 +75,21 @@
     <div id="quiz-counter" style="text-align: right; color: #999; font-weight: bold;">1 / 1</div>
     <div id="display-container"></div>
     <div class="controls">
+        <!-- 語速調整區塊：0.1 到 1.0，刻度 0.1 -->
         <div class="speed-control">
             <span class="label">語速</span>
-            <input type="range" id="speed-slider" min="0.3" max="1.5" step="0.1" value="0.7" oninput="document.getElementById('speed-label').innerText = parseFloat(this.value).toFixed(1)">
+            <input type="range" id="speed-slider" min="0.1" max="1.0" step="0.1" value="0.7" oninput="document.getElementById('speed-label').innerText = parseFloat(this.value).toFixed(1)">
             <span class="label"><span id="speed-label">0.7</span>x</span>
         </div>
-        <button class="btn-main btn-audio" onclick="playCurrentWord()">
-            <span class="icon">📢</span><span class="label">發音</span>
+
+        <!-- 雙發音按鈕 -->
+        <button class="btn-main btn-audio-us" onclick="playWord('us')">
+            <span class="icon">🇺🇸</span><span class="label">美式發音</span>
         </button>
+        <button class="btn-main btn-audio-gb" onclick="playWord('gb')">
+            <span class="icon">🇬🇧</span><span class="label">英式發音</span>
+        </button>
+
         <button class="btn-main btn-nav" onclick="prevWord()">
             <span class="icon">⬅️</span><span class="label">上一題</span>
         </button>
@@ -87,7 +97,7 @@
             <span class="icon">➡️</span><span class="label">下一題</span>
         </button>
         <button class="btn-main btn-toggle" id="btn-toggle" onclick="toggleAnswer()">
-            <span class="icon" id="eye-icon">👁️</span><span class="label" id="toggle-label">顯示</span>
+            <span class="icon" id="eye-icon">👁️</span><span class="label" id="toggle-label">顯示答案</span>
         </button>
     </div>
     <button style="margin-top:25px; background:none; border:none; color:#aaa; text-decoration:underline; cursor: pointer;" onclick="location.reload()">重新上傳</button>
@@ -140,10 +150,7 @@
         ctx.rotate((rotationAngle * Math.PI) / 180);
         ctx.drawImage(img, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
 
-        // ==========================================
-        // 終極技術：Bradley-Roth 積分圖局部自適應二值化
-        // 完美解決不均勻光照，保留邊角字體，抹除淺色鉛筆痕跡
-        // ==========================================
+        // Bradley-Roth 局部自適應二值化
         const width = canvas.width;
         const height = canvas.height;
         const imageData = ctx.getImageData(0, 0, width, height);
@@ -163,9 +170,9 @@
             }
         }
 
-        const S = Math.floor(width / 20); // 採樣區塊大小
+        const S = Math.floor(width / 20);
         const s2 = Math.floor(S / 2);
-        const T = 15; // 閾值 (必須比周圍暗 15% 才視為文字墨水)
+        const T = 15;
 
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
@@ -175,7 +182,6 @@
                 let y2 = Math.min(y + s2, height - 1);
                 
                 let count = (x2 - x1 + 1) * (y2 - y1 + 1);
-                
                 let sum = integral[y2 * width + x2];
                 if (y1 > 0) sum -= integral[(y1 - 1) * width + x2];
                 if (x1 > 0) sum -= integral[y2 * width + (x1 - 1)];
@@ -183,8 +189,6 @@
                 
                 let avg = sum / count;
                 let i = y * width + x;
-                
-                // 二值化：深色墨水變純黑，其他（陰影、紙張、淺鉛筆）變純白
                 let val = (gray[i] < avg * ((100 - T) / 100)) ? 0 : 255;
                 
                 data[i * 4] = val;
@@ -198,8 +202,6 @@
         try {
             document.getElementById('status').innerText = "OCR 網格結構解析中...";
             const worker = await Tesseract.createWorker('eng');
-            
-            // 由於前處理已經極度乾淨，使用 SPARSE_TEXT 可精確提取散落的單字網格
             await worker.setParameters({
                 tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
             });
@@ -207,12 +209,11 @@
             const { data: { text } } = await worker.recognize(canvas);
             await worker.terminate();
 
-            // 精確清理
             let rawWords = text.split(/[\s\n\r]+/)
-                               .map(w => w.replace(/[^a-zA-Z]/g, '').toLowerCase()) // 清除非英文字符並轉小寫
-                               .filter(w => w.length >= 3 || w === 'of' || w === 'on'); // 單字卡長度過濾
+                               .map(w => w.replace(/[^a-zA-Z]/g, '').toLowerCase())
+                               .filter(w => w.length >= 3 || w === 'of' || w === 'on');
                                
-            words = [...new Set(rawWords)]; // 移除可能重複讀取的單字
+            words = [...new Set(rawWords)];
             
             if (words.length === 0) {
                 throw new Error("未能提取出任何有效單字，請確認圖片方向正確。");
@@ -318,14 +319,38 @@
 
     function updateToggleUI() {
         document.getElementById('eye-icon').innerText = isShowing ? "🙈" : "👁️"; 
-        document.getElementById('toggle-label').innerText = isShowing ? "隱藏" : "顯示";
+        document.getElementById('toggle-label').innerText = isShowing ? "隱藏答案" : "顯示答案";
     }
 
-    function playCurrentWord() {
+    // 雙語音發音核心函數
+    function playWord(accent) {
+        if (!words[currentIndex]) return;
+        window.speechSynthesis.cancel(); // 停止當前正在播放的語音
+
         const utterance = new SpeechSynthesisUtterance(words[currentIndex]);
-        utterance.lang = 'en-US';
         utterance.rate = parseFloat(document.getElementById('speed-slider').value);
+        
+        const voices = window.speechSynthesis.getVoices();
+        const enVoices = voices.filter(v => v.lang && v.lang.toLowerCase().includes('en'));
+
+        if (accent === 'us') {
+            utterance.lang = 'en-US';
+            const usVoice = enVoices.find(v => v.lang.toLowerCase().includes('us'));
+            if (usVoice) utterance.voice = usVoice;
+        } else {
+            utterance.lang = 'en-GB';
+            const gbVoice = enVoices.find(v => v.lang.toLowerCase().includes('gb') || v.lang.toLowerCase().includes('uk'));
+            if (gbVoice) utterance.voice = gbVoice;
+        }
+
         window.speechSynthesis.speak(utterance);
+    }
+
+    // 預先載入語音清單（部分瀏覽器需要）
+    if ('speechSynthesis' in window) {
+        window.speechSynthesis.onvoiceschanged = () => {
+            window.speechSynthesis.getVoices();
+        };
     }
 
     function nextWord() { if (currentIndex < words.length - 1) { currentIndex++; initQuizWord(); } }
