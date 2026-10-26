@@ -42,8 +42,10 @@
             font-weight: bold;
         }
         
-        /* 大按鈕樣式 */
+        /* 大按鈕與語速控制樣式 */
         .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .speed-control { grid-column: span 2; display: flex; align-items: center; justify-content: center; gap: 10px; background: #f8f9fa; padding: 10px 15px; border-radius: 15px; border: 1px solid #eee; }
+        .speed-control input[type=range] { flex-grow: 1; cursor: pointer; }
         .btn-main { border: none; border-radius: 15px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 15px; }
         .btn-audio { grid-column: span 2; background: var(--accent); color: #444; }
         .btn-audio .icon { font-size: 4rem; } 
@@ -77,6 +79,13 @@
     <div id="display-container"></div>
     
     <div class="controls">
+        <!-- 語速調整區塊 -->
+        <div class="speed-control">
+            <span class="label">語速</span>
+            <input type="range" id="speed-slider" min="0.3" max="1.5" step="0.1" value="0.7" oninput="document.getElementById('speed-label').innerText = parseFloat(this.value).toFixed(1)">
+            <span class="label"><span id="speed-label">0.7</span>x</span>
+        </div>
+
         <button class="btn-main btn-audio" onclick="playCurrentWord()">
             <span class="icon">📢</span><span class="label">發音</span>
         </button>
@@ -98,7 +107,7 @@
     let currentIndex = 0;
     let isShowing = false;
 
-    // --- OCR ---
+    // --- OCR 影像轉正與高準確率辨識 ---
     document.getElementById('image-input').addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -106,22 +115,16 @@
         document.getElementById('status').innerText = "影像轉正與辨識中，請稍候...";
         
         try {
-            // 1. 建立 Worker，同時載入英文 (eng) 與方向偵測 (osd) 語言包
             const worker = await Tesseract.createWorker('eng+osd');
-            
-            // 2. 設定 Tesseract 參數
             await worker.setParameters({
-                tessedit_pageseg_mode: Tesseract.PSM.AUTO_OSD, // PSM 1: 自動偵測影像方向並轉正文字
-                tessedit_char_whitelist: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ \n\r', // 白名單：僅允許大小寫字母、空白與換行
+                tessedit_pageseg_mode: Tesseract.PSM.AUTO_OSD,
+                tessedit_char_whitelist: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ \n\r',
             });
-    
-            // 3. 執行辨識
+
             const { data: { text } } = await worker.recognize(file);
-            
-            // 4. 關閉 worker 釋放記憶體資源
             await worker.terminate();
-    
-            // 5. 二次過濾：依照空白/換行切割，並強制濾除長度小於 2 的單字，確保純英文
+
+            // 過濾並清理辨識結果
             words = text.split(/\s+/).filter(w => w.length >= 2 && /^[a-zA-Z]+$/.test(w));
             
             renderWordList();
@@ -133,6 +136,7 @@
         }
     });
 
+    // --- 渲染單字列表 (包含修正與刪除按鈕) ---
     function renderWordList() {
         const list = document.getElementById('word-list');
         list.innerHTML = '';
@@ -175,7 +179,7 @@
         }
     }
 
-    // --- Quiz ---
+    // --- 測驗功能 ---
     function startQuiz() {
         const allInputs = document.querySelectorAll('.word-item input');
         words = Array.from(allInputs).map(i => i.value.trim()).filter(w => w !== "");
@@ -232,7 +236,8 @@
     function playCurrentWord() {
         const utterance = new SpeechSynthesisUtterance(words[currentIndex]);
         utterance.lang = 'en-US';
-        utterance.rate = 0.7;
+        // 即時讀取拉桿的值來設定語速
+        utterance.rate = parseFloat(document.getElementById('speed-slider').value);
         window.speechSynthesis.speak(utterance);
     }
 
