@@ -51,7 +51,7 @@
 <body>
 
 <div class="card" id="upload-section">
-    <h2>📷 第一步：上傳照片 <span style="font-size: 0.8rem; color: #aaa;">v0.4</span></h2>
+    <h2>📷 第一步：上傳照片 <span style="font-size: 0.8rem; color: #aaa;">v0.5</span></h2>
     <input type="file" id="image-input" accept="image/*">
     
     <div id="preview-container">
@@ -124,7 +124,7 @@
     }
 
     async function processImage() {
-        document.getElementById('status').innerText = "啟動稀疏文字解析模式，請稍候...";
+        document.getElementById('status').innerText = "影像增強與高對比二值化處理中...";
         const imgPreview = document.getElementById('image-preview');
         
         const canvas = document.createElement('canvas');
@@ -153,10 +153,30 @@
         ctx.rotate((rotationAngle * Math.PI) / 180);
         ctx.drawImage(img, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
 
+        // ==========================================
+        // 核心進化：影像二值化 (Binarization)
+        // 將紙張背景洗成純白，文字轉為純黑，去除陰影與鉛筆痕跡
+        // ==========================================
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        for (let i = 0; i < data.length; i += 4) {
+            // 透過 RGB 計算亮度
+            const brightness = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+            
+            // 臨界值設定 (140)：低於 140 視為文字(轉純黑)，高於視為紙張(轉純白)
+            const color = brightness < 140 ? 0 : 255;
+            
+            data[i] = color;       // Red
+            data[i + 1] = color;   // Green
+            data[i + 2] = color;   // Blue
+        }
+        ctx.putImageData(imageData, 0, 0);
+
         try {
+            document.getElementById('status').innerText = "OCR 文字解析中...";
             const worker = await Tesseract.createWorker('eng');
             
-            // 關鍵修正：套用 SPARSE_TEXT 模式，明確告知 AI 這是散落的單字網格
+            // 由於影像已經處理成極度乾淨的黑白，PSM.SPARSE_TEXT 能夠完美分離單字
             await worker.setParameters({
                 tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
             });
@@ -169,14 +189,14 @@
                                .map(w => w.replace(/[^a-zA-Z]/g, ''))
                                .filter(w => w.length >= 2);
                                
-            // 過濾掉可能因為紙張紋理產生的「全大寫」短雜訊 (例如 ERE, XH)，保留正常單字
+            // 過濾孤立的無意義大寫雜訊
             rawWords = rawWords.filter(w => !(w === w.toUpperCase() && w.length < 4));
             
             // 移除重複出現的單字
             words = [...new Set(rawWords)];
             
             if (words.length === 0) {
-                throw new Error("未能提取出任何有效單字，請確認圖片已旋轉為正向且字體清晰。");
+                throw new Error("未能提取出任何有效單字，請確保圖片文字清晰。");
             }
 
             renderWordList();
