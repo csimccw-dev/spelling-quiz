@@ -102,14 +102,35 @@
     document.getElementById('image-input').addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        document.getElementById('status').innerText = "辨識中...";
+        
+        document.getElementById('status').innerText = "影像轉正與辨識中，請稍候...";
+        
         try {
-            const { data: { text } } = await Tesseract.recognize(file, 'eng');
-            words = text.split(/\s+/).filter(w => w.length >= 2 && /^[a-zA-Z-]+$/.test(w));
+            // 1. 建立 Worker，同時載入英文 (eng) 與方向偵測 (osd) 語言包
+            const worker = await Tesseract.createWorker('eng+osd');
+            
+            // 2. 設定 Tesseract 參數
+            await worker.setParameters({
+                tessedit_pageseg_mode: Tesseract.PSM.AUTO_OSD, // PSM 1: 自動偵測影像方向並轉正文字
+                tessedit_char_whitelist: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ \n\r', // 白名單：僅允許大小寫字母、空白與換行
+            });
+    
+            // 3. 執行辨識
+            const { data: { text } } = await worker.recognize(file);
+            
+            // 4. 關閉 worker 釋放記憶體資源
+            await worker.terminate();
+    
+            // 5. 二次過濾：依照空白/換行切割，並強制濾除長度小於 2 的單字，確保純英文
+            words = text.split(/\s+/).filter(w => w.length >= 2 && /^[a-zA-Z]+$/.test(w));
+            
             renderWordList();
             document.getElementById('upload-section').style.display = 'none';
             document.getElementById('edit-section').style.display = 'block';
-        } catch (err) { alert(err.message); }
+        } catch (err) { 
+            alert("辨識失敗：" + err.message); 
+            document.getElementById('status').innerText = "請選取單字圖片";
+        }
     });
 
     function renderWordList() {
