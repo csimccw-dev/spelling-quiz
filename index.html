@@ -10,7 +10,6 @@
         body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background-color: #f0f7fa; display: flex; flex-direction: column; align-items: center; padding: 15px; margin: 0; }
         .card { background: white; padding: 1.5rem; border-radius: 20px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); width: 100%; max-width: 450px; text-align: center; box-sizing: border-box; }
         
-        /* 圖片預覽與旋轉 */
         #preview-container { display: none; margin-top: 15px; text-align: center; }
         .preview-wrapper { width: 100%; height: 250px; display: flex; align-items: center; justify-content: center; overflow: hidden; margin-bottom: 15px; background: #fafafa; border-radius: 8px; border: 1px dashed #ccc; }
         #image-preview { max-width: 100%; max-height: 100%; transition: transform 0.3s ease; }
@@ -18,21 +17,16 @@
         .bg-primary { background: var(--primary); }
         .bg-success { background: var(--success); }
 
-        /* 校正頁面 */
         #edit-section { display: none; }
         .word-item { display: flex; align-items: center; margin-bottom: 8px; gap: 8px; }
         .word-item input { flex-grow: 1; padding: 10px; font-size: 1.1rem; border: 1px solid #ddd; border-radius: 8px; }
         .btn-edit { padding: 8px 12px; background: var(--primary); color: white; border: none; border-radius: 8px; cursor: pointer; }
         .btn-delete { padding: 8px 12px; background: var(--danger); color: white; border: none; border-radius: 8px; cursor: pointer; }
 
-        /* 測驗頁面顯示區 */
         #quiz-section { display: none; }
         #display-container { width: 100%; margin: 2rem 0; min-height: 5rem; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
-        
-        /* 每個字母的獨立方塊樣式 */
         .char-box { border-bottom: 4px solid var(--text); width: 25px; height: 45px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; font-family: 'Arial', sans-serif; font-weight: bold; }
         
-        /* 大按鈕與語速控制樣式 */
         .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
         .speed-control { grid-column: span 2; display: flex; align-items: center; justify-content: center; gap: 10px; background: #f8f9fa; padding: 10px 15px; border-radius: 15px; border: 1px solid #eee; }
         .speed-control input[type=range] { flex-grow: 1; cursor: pointer; }
@@ -51,7 +45,7 @@
 <body>
 
 <div class="card" id="upload-section">
-    <h2>📷 第一步：上傳照片 <span style="font-size: 0.8rem; color: #aaa;">v0.7</span></h2>
+    <h2>📷 第一步：上傳照片 <span style="font-size: 0.8rem; color: #aaa;">v0.8</span></h2>
     <input type="file" id="image-input" accept="image/*">
     
     <div id="preview-container">
@@ -64,11 +58,10 @@
         </div>
     </div>
 
-    <div id="status" style="margin-top:20px; color:#666;">請點擊「旋轉圖片」直到文字為水平正向，再按確認</div>
+    <div id="status" style="margin-top:20px; color:#666;">💡 提示：請將圖片旋轉至「單字呈水平正向」以確保最佳辨識率。</div>
 </div>
 
 <div class="card" id="edit-section">
-    <!-- 新增：動態顯示辨識數量的標題 -->
     <h2 id="edit-title">✏️ 第二步：確認單字</h2>
     <div id="word-list" style="max-height: 300px; overflow-y: auto;"></div>
     <button class="btn-add" onclick="addNewWord()">➕ 手動增加</button>
@@ -109,14 +102,11 @@
     document.getElementById('image-input').addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        
         rotationAngle = 0;
         const imgPreview = document.getElementById('image-preview');
         imgPreview.src = URL.createObjectURL(file);
         imgPreview.style.transform = `rotate(${rotationAngle}deg)`;
-        
         document.getElementById('preview-container').style.display = 'block';
-        document.getElementById('status').innerText = "💡 提示：請務必將圖片旋轉至「單字呈水平橫向」，辨識率最高。";
     });
 
     function rotateImage() {
@@ -125,22 +115,16 @@
     }
 
     async function processImage() {
-        document.getElementById('status').innerText = "AI 視覺對齊與文字解析中...";
+        document.getElementById('status').innerText = "執行局部自適應二值化 (消除陰影與鉛筆痕)...";
         const imgPreview = document.getElementById('image-preview');
-        
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         const img = new Image();
         img.src = imgPreview.src;
         await new Promise(r => img.onload = r);
 
-        // 核心進化 1：最佳化解析度 
-        // 1200px 是 Tesseract 抓取網格文字的最佳甜蜜點，避免字體過大被誤判為圖形
-        const MAX_SIZE = 1200;
-        let scale = 1;
-        if (img.width > MAX_SIZE || img.height > MAX_SIZE) {
-            scale = Math.min(MAX_SIZE / img.width, MAX_SIZE / img.height);
-        }
+        const MAX_SIZE = 1500;
+        let scale = Math.min(1, Math.min(MAX_SIZE / img.width, MAX_SIZE / img.height));
         const scaledWidth = img.width * scale;
         const scaledHeight = img.height * scale;
 
@@ -154,37 +138,84 @@
 
         ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.rotate((rotationAngle * Math.PI) / 180);
-        
-        // 核心進化 2：原生溫和濾鏡
-        // 捨棄會吃掉陰影邊角的手動像素計算，改用原生的溫和對比，保留 off, top 等邊角字
-        ctx.filter = 'grayscale(100%) contrast(120%) brightness(110%)';
         ctx.drawImage(img, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
 
+        // ==========================================
+        // 終極技術：Bradley-Roth 積分圖局部自適應二值化
+        // 完美解決不均勻光照，保留邊角字體，抹除淺色鉛筆痕跡
+        // ==========================================
+        const width = canvas.width;
+        const height = canvas.height;
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const data = imageData.data;
+        
+        const gray = new Uint8Array(width * height);
+        for (let i = 0; i < width * height; i++) {
+            gray[i] = 0.299 * data[i*4] + 0.587 * data[i*4+1] + 0.114 * data[i*4+2];
+        }
+
+        const integral = new Uint32Array(width * height);
+        for (let y = 0; y < height; y++) {
+            let sum = 0;
+            for (let x = 0; x < width; x++) {
+                sum += gray[y * width + x];
+                integral[y * width + x] = sum + (y > 0 ? integral[(y - 1) * width + x] : 0);
+            }
+        }
+
+        const S = Math.floor(width / 20); // 採樣區塊大小
+        const s2 = Math.floor(S / 2);
+        const T = 15; // 閾值 (必須比周圍暗 15% 才視為文字墨水)
+
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                let x1 = Math.max(x - s2, 0);
+                let x2 = Math.min(x + s2, width - 1);
+                let y1 = Math.max(y - s2, 0);
+                let y2 = Math.min(y + s2, height - 1);
+                
+                let count = (x2 - x1 + 1) * (y2 - y1 + 1);
+                
+                let sum = integral[y2 * width + x2];
+                if (y1 > 0) sum -= integral[(y1 - 1) * width + x2];
+                if (x1 > 0) sum -= integral[y2 * width + (x1 - 1)];
+                if (x1 > 0 && y1 > 0) sum += integral[(y1 - 1) * width + (x1 - 1)];
+                
+                let avg = sum / count;
+                let i = y * width + x;
+                
+                // 二值化：深色墨水變純黑，其他（陰影、紙張、淺鉛筆）變純白
+                let val = (gray[i] < avg * ((100 - T) / 100)) ? 0 : 255;
+                
+                data[i * 4] = val;
+                data[i * 4 + 1] = val;
+                data[i * 4 + 2] = val;
+                data[i * 4 + 3] = 255;
+            }
+        }
+        ctx.putImageData(imageData, 0, 0);
+
         try {
+            document.getElementById('status').innerText = "OCR 網格結構解析中...";
             const worker = await Tesseract.createWorker('eng');
             
-            // 核心進化 3：切換為 SINGLE_BLOCK 模式
-            // 告訴 AI 這是一個完整的網格區塊，強迫它忽視字距之間的鉛筆塗鴉，杜絕 "and" 亂入
+            // 由於前處理已經極度乾淨，使用 SPARSE_TEXT 可精確提取散落的單字網格
             await worker.setParameters({
-                tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+                tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
             });
             
             const { data: { text } } = await worker.recognize(canvas);
             await worker.terminate();
 
-            // 精確後處理與碎字過濾 (單字卡至少都大於 3 個字母)
+            // 精確清理
             let rawWords = text.split(/[\s\n\r]+/)
-                               .map(w => w.replace(/[^a-zA-Z]/g, ''))
-                               .filter(w => w.length >= 3); 
+                               .map(w => w.replace(/[^a-zA-Z]/g, '').toLowerCase()) // 清除非英文字符並轉小寫
+                               .filter(w => w.length >= 3 || w === 'of' || w === 'on'); // 單字卡長度過濾
                                
-            // 過濾孤立的全大寫雜訊
-            rawWords = rawWords.filter(w => !(w === w.toUpperCase() && w.length < 4));
-            
-            // 移除重複出現的單字
-            words = [...new Set(rawWords)];
+            words = [...new Set(rawWords)]; // 移除可能重複讀取的單字
             
             if (words.length === 0) {
-                throw new Error("未能提取出任何有效單字，請確保圖片文字清晰且方向正確。");
+                throw new Error("未能提取出任何有效單字，請確認圖片方向正確。");
             }
 
             renderWordList();
@@ -209,8 +240,6 @@
             `;
             list.appendChild(div);
         });
-        
-        // 更新標題顯示數量
         document.getElementById('edit-title').innerText = `✏️ 第二步：確認單字 (共辨識出 ${words.length} 個)`;
     }
 
@@ -230,18 +259,17 @@
         const newWord = prompt("請輸入單字：");
         if (newWord?.trim()) {
             words.push(newWord.trim());
-            renderWordList(); // 重新渲染並更新數量
+            renderWordList(); 
         }
     }
 
     function deleteWord(index) {
         if (confirm("確定要刪除這個單字嗎？")) {
             words.splice(index, 1);
-            renderWordList(); // 重新渲染並更新數量
+            renderWordList(); 
         }
     }
 
-    // --- 測驗功能 ---
     function startQuiz() {
         const allInputs = document.querySelectorAll('.word-item input');
         words = Array.from(allInputs).map(i => i.value.trim()).filter(w => w !== "");
