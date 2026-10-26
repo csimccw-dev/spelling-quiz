@@ -51,7 +51,7 @@
 <body>
 
 <div class="card" id="upload-section">
-    <h2>📷 第一步：上傳照片 <span style="font-size: 0.8rem; color: #aaa;">v0.5</span></h2>
+    <h2>📷 第一步：上傳照片 <span style="font-size: 0.8rem; color: #aaa;">v0.6</span></h2>
     <input type="file" id="image-input" accept="image/*">
     
     <div id="preview-container">
@@ -115,7 +115,7 @@
         imgPreview.style.transform = `rotate(${rotationAngle}deg)`;
         
         document.getElementById('preview-container').style.display = 'block';
-        document.getElementById('status').innerText = "請點擊「旋轉圖片」直到文字為正向，再按確認";
+        document.getElementById('status').innerText = "請點擊「旋轉圖片」直到文字為水平正向，再按確認";
     });
 
     function rotateImage() {
@@ -124,7 +124,7 @@
     }
 
     async function processImage() {
-        document.getElementById('status').innerText = "影像增強與高對比二值化處理中...";
+        document.getElementById('status').innerText = "影像溫和對比增強處理中...";
         const imgPreview = document.getElementById('image-preview');
         
         const canvas = document.createElement('canvas');
@@ -154,21 +154,24 @@
         ctx.drawImage(img, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
 
         // ==========================================
-        // 核心進化：影像二值化 (Binarization)
-        // 將紙張背景洗成純白，文字轉為純黑，去除陰影與鉛筆痕跡
+        // 核心進化 (v0.6)：灰階對比度增強 (Contrast Stretch)
+        // 放棄強制洗成純白，改為加深黑色字體並適度提亮背景
+        // 這樣能保留邊緣平滑度，避免右側較淡的字被消滅
         // ==========================================
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
         for (let i = 0; i < data.length; i += 4) {
-            // 透過 RGB 計算亮度
-            const brightness = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+            let r = data[i], g = data[i+1], b = data[i+2];
+            // 轉換為灰階亮度
+            let gray = 0.299 * r + 0.587 * g + 0.114 * b;
             
-            // 臨界值設定 (140)：低於 140 視為文字(轉純黑)，高於視為紙張(轉純白)
-            const color = brightness < 140 ? 0 : 255;
+            // 提升對比度公式：(亮度 - 128) * 增強係數 + 128
+            let contrast = (gray - 128) * 1.8 + 128; 
+            let finalGray = Math.min(255, Math.max(0, contrast));
             
-            data[i] = color;       // Red
-            data[i + 1] = color;   // Green
-            data[i + 2] = color;   // Blue
+            data[i] = finalGray;       // R
+            data[i + 1] = finalGray;   // G
+            data[i + 2] = finalGray;   // B
         }
         ctx.putImageData(imageData, 0, 0);
 
@@ -176,7 +179,6 @@
             document.getElementById('status').innerText = "OCR 文字解析中...";
             const worker = await Tesseract.createWorker('eng');
             
-            // 由於影像已經處理成極度乾淨的黑白，PSM.SPARSE_TEXT 能夠完美分離單字
             await worker.setParameters({
                 tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
             });
@@ -184,12 +186,14 @@
             const { data: { text } } = await worker.recognize(canvas);
             await worker.terminate();
 
-            // 精確後處理
-            let rawWords = text.split(/\s+/)
+            // 精確後處理與碎字過濾
+            let rawWords = text.split(/[\s\n\r]+/)
                                .map(w => w.replace(/[^a-zA-Z]/g, ''))
-                               .filter(w => w.length >= 2);
+                               // 注意：這裡將最短長度提高到 3，可瞬間秒殺 ar, et, ja 等雜點碎字
+                               // 若未來測驗包含 do, is, to 等 2 字元單字，可改回 >= 2
+                               .filter(w => w.length >= 3); 
                                
-            // 過濾孤立的無意義大寫雜訊
+            // 過濾孤立的全大寫雜訊 (如 ERE)
             rawWords = rawWords.filter(w => !(w === w.toUpperCase() && w.length < 4));
             
             // 移除重複出現的單字
