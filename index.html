@@ -24,9 +24,9 @@
             margin: 2rem 0;
             min-height: 5rem;
             display: flex;
-            flex-wrap: wrap; /* 萬一真的太長會自動換行，不擠在一起 */
+            flex-wrap: wrap;
             justify-content: center;
-            gap: 8px; /* 每個底線之間的固定間距 */
+            gap: 8px;
         }
         
         /* 每個字母的獨立方塊樣式 */
@@ -61,7 +61,7 @@
 <body>
 
 <div class="card" id="upload-section">
-    <h2>📷 第一步：上傳照片</h2>
+    <h2>📷 第一步：上傳照片 (v0.1)</h2>
     <input type="file" id="image-input" accept="image/*">
     <div id="status" style="margin-top:20px; color:#666;">請選取單字圖片</div>
 </div>
@@ -112,27 +112,47 @@
         const file = e.target.files[0];
         if (!file) return;
         
-        document.getElementById('status').innerText = "影像轉正與辨識中，請稍候...";
+        const statusEl = document.getElementById('status');
+        statusEl.innerText = "準備辨識引擎...";
         
         try {
-            const worker = await Tesseract.createWorker('eng+osd');
+            // 建立 Worker，並加入 logger 監控進度
+            const worker = await Tesseract.createWorker('eng+osd', 1, {
+                logger: m => {
+                    if (m.status === 'recognizing text') {
+                        statusEl.innerText = `分析與轉正辨識中... ${Math.round(m.progress * 100)}%`;
+                    } else if (m.status === 'loading tesseract core' || m.status.includes('loading language')) {
+                        statusEl.innerText = `載入 AI 模型中...`;
+                    }
+                }
+            });
+
+            // 設定自動轉正模式 (不使用 whitelist，避免干擾 OSD 判斷)
             await worker.setParameters({
                 tessedit_pageseg_mode: Tesseract.PSM.AUTO_OSD,
-                tessedit_char_whitelist: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ \n\r',
             });
 
             const { data: { text } } = await worker.recognize(file);
             await worker.terminate();
 
-            // 過濾並清理辨識結果
-            words = text.split(/\s+/).filter(w => w.length >= 2 && /^[a-zA-Z]+$/.test(w));
+            // 利用 JS 進行二次過濾：將非大小寫英文字母與空白的字元全部刪除
+            const cleanText = text.replace(/[^a-zA-Z\s]/g, '');
+            
+            // 依照空白切割，並排除長度小於 2 的單字
+            words = cleanText.split(/\s+/).filter(w => w.length >= 2);
+            
+            if (words.length === 0) {
+                alert("未能辨識出任何有效單字，請確認圖片文字是否清晰。");
+                statusEl.innerText = "請重新選取圖片";
+                return;
+            }
             
             renderWordList();
             document.getElementById('upload-section').style.display = 'none';
             document.getElementById('edit-section').style.display = 'block';
         } catch (err) { 
             alert("辨識失敗：" + err.message); 
-            document.getElementById('status').innerText = "請選取單字圖片";
+            statusEl.innerText = "請選取單字圖片";
         }
     });
 
@@ -202,7 +222,7 @@
         container.innerHTML = '';
         const targetWord = words[currentIndex];
         
-        // 針對 classroom 這種長單字，如果總寬度太窄就縮小方塊
+        // 針對長單字縮小方塊
         const boxWidth = targetWord.length > 10 ? 20 : 30;
 
         for (let i = 0; i < targetWord.length; i++) {
@@ -236,7 +256,7 @@
     function playCurrentWord() {
         const utterance = new SpeechSynthesisUtterance(words[currentIndex]);
         utterance.lang = 'en-US';
-        // 即時讀取拉桿的值來設定語速
+        // 讀取拉桿的值來設定語速
         utterance.rate = parseFloat(document.getElementById('speed-slider').value);
         window.speechSynthesis.speak(utterance);
     }
