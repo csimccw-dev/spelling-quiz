@@ -51,7 +51,7 @@
 <body>
 
 <div class="card" id="upload-section">
-    <h2>📷 第一步：上傳照片 <span style="font-size: 0.8rem; color: #aaa;">v0.2</span></h2>
+    <h2>📷 第一步：上傳照片 <span style="font-size: 0.8rem; color: #aaa;">v0.3</span></h2>
     <input type="file" id="image-input" accept="image/*">
     
     <div id="preview-container">
@@ -124,7 +124,7 @@
     }
 
     async function processImage() {
-        document.getElementById('status').innerText = "影像降維與辨識中，請稍候...";
+        document.getElementById('status').innerText = "影像辨識中，解放內建字典校正...";
         const imgPreview = document.getElementById('image-preview');
         
         const canvas = document.createElement('canvas');
@@ -133,8 +133,8 @@
         img.src = imgPreview.src;
         await new Promise(r => img.onload = r);
 
-        // 1. 自動降維：避免高畫質原圖導致記憶體不足
-        const MAX_SIZE = 1500;
+        // 1. 提升畫布最大尺寸至 2000px，確保微距攝影的字母不會因壓縮過度而糊化
+        const MAX_SIZE = 2000;
         let scale = 1;
         if (img.width > MAX_SIZE || img.height > MAX_SIZE) {
             scale = Math.min(MAX_SIZE / img.width, MAX_SIZE / img.height);
@@ -155,20 +155,17 @@
         ctx.drawImage(img, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
 
         try {
+            // 2. 直接建立 eng 模型，不強加任何限制參數，讓 Tesseract 發揮上下文聯想能力
             const worker = await Tesseract.createWorker('eng');
             
-            await worker.setParameters({
-                tessedit_char_whitelist: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ \n\r',
-                // 2. 導入稀疏文字辨識模式，專門對付散落的單字卡
-                tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT, 
-            });
-
             const { data: { text } } = await worker.recognize(canvas);
             await worker.terminate();
 
-            // 3. 改良過濾：先強制拔除所有非字母符號，再判斷長度，保留帶有筆跡雜訊的單字
+            // 3. 改由 Javascript 進行精確的後處理
             words = text.split(/\s+/)
-                        .map(w => w.replace(/[^a-zA-Z]/g, '')) 
+                        // 拔除所有不是英文字母的符號（例如打叉、句號、雜點）
+                        .map(w => w.replace(/[^a-zA-Z]/g, ''))
+                        // 過濾掉單個字元的孤兒字母（通常是雜訊）或空白
                         .filter(w => w.length >= 2);
             
             if (words.length === 0) {
