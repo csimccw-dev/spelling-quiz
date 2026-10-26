@@ -48,7 +48,7 @@
 <body>
 
 <div class="card" id="upload-section">
-    <h2>📷 第一步：上傳照片 <span style="font-size: 0.8rem; color: #aaa;">v0.10</span></h2>
+    <h2>📷 第一步：上傳照片 <span style="font-size: 0.8rem; color: #aaa;">v0.11</span></h2>
     <input type="file" id="image-input" accept="image/*">
     
     <div id="preview-container">
@@ -75,14 +75,12 @@
     <div id="quiz-counter" style="text-align: right; color: #999; font-weight: bold;">1 / 1</div>
     <div id="display-container"></div>
     <div class="controls">
-        <!-- 語速調整區塊：0.1 到 1.0，刻度 0.1 -->
         <div class="speed-control">
             <span class="label">語速</span>
             <input type="range" id="speed-slider" min="0.1" max="1.0" step="0.1" value="0.7" oninput="document.getElementById('speed-label').innerText = parseFloat(this.value).toFixed(1)">
             <span class="label"><span id="speed-label">0.7</span>x</span>
         </div>
 
-        <!-- 雙發音按鈕：使用國旗圖案取代純文字 -->
         <button class="btn-main btn-audio-us" onclick="playWord('us')">
             <span class="icon">🇺🇸</span><span class="label">美式發音</span>
         </button>
@@ -150,7 +148,6 @@
         ctx.rotate((rotationAngle * Math.PI) / 180);
         ctx.drawImage(img, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
 
-        // Bradley-Roth 局部自適應二值化
         const width = canvas.width;
         const height = canvas.height;
         const imageData = ctx.getImageData(0, 0, width, height);
@@ -322,7 +319,7 @@
         document.getElementById('toggle-label').innerText = isShowing ? "隱藏答案" : "顯示答案";
     }
 
-    // 雙語音發音核心函數
+    // v0.11 升級版：強化雙語音引擎匹配與音高區隔
     function playWord(accent) {
         if (!words[currentIndex]) return;
         window.speechSynthesis.cancel();
@@ -331,15 +328,18 @@
         utterance.rate = parseFloat(document.getElementById('speed-slider').value);
         
         const voices = window.speechSynthesis.getVoices();
-        const enVoices = voices.filter(v => v.lang && v.lang.toLowerCase().includes('en'));
 
         if (accent === 'us') {
             utterance.lang = 'en-US';
-            const usVoice = enVoices.find(v => v.lang.toLowerCase().includes('us'));
+            utterance.pitch = 1.0; // 標準美式音高
+            // 精準尋找包含 US / United States / America 的美式語音
+            const usVoice = voices.find(v => v.lang === 'en-US' || v.name.includes('United States') || v.name.includes('US') || v.name.includes('America'));
             if (usVoice) utterance.voice = usVoice;
         } else {
             utterance.lang = 'en-GB';
-            const gbVoice = enVoices.find(v => v.lang.toLowerCase().includes('gb') || v.lang.toLowerCase().includes('uk'));
+            utterance.pitch = 1.15; // 稍微拉高音高，確保即使系統共用同一個語音包也能聽出差異
+            // 強力尋找包含 GB / UK / British / United Kingdom 的英式語音
+            const gbVoice = voices.find(v => v.lang === 'en-GB' || v.lang === 'en-UK' || v.name.includes('United Kingdom') || v.name.includes('British') || v.name.includes('GB') || v.name.includes('UK'));
             if (gbVoice) utterance.voice = gbVoice;
         }
 
