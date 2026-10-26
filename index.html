@@ -10,6 +10,14 @@
         body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; background-color: #f0f7fa; display: flex; flex-direction: column; align-items: center; padding: 15px; margin: 0; }
         .card { background: white; padding: 1.5rem; border-radius: 20px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); width: 100%; max-width: 450px; text-align: center; box-sizing: border-box; }
         
+        /* 圖片預覽與旋轉 */
+        #preview-container { display: none; margin-top: 15px; text-align: center; }
+        .preview-wrapper { width: 100%; height: 250px; display: flex; align-items: center; justify-content: center; overflow: hidden; margin-bottom: 15px; background: #fafafa; border-radius: 8px; border: 1px dashed #ccc; }
+        #image-preview { max-width: 100%; max-height: 100%; transition: transform 0.3s ease; }
+        .btn-action { padding: 10px 15px; border: none; border-radius: 8px; cursor: pointer; color: white; font-size: 1rem; font-weight: bold; }
+        .bg-primary { background: var(--primary); }
+        .bg-success { background: var(--success); }
+
         /* 校正頁面 */
         #edit-section { display: none; }
         .word-item { display: flex; align-items: center; margin-bottom: 8px; gap: 8px; }
@@ -19,28 +27,10 @@
 
         /* 測驗頁面顯示區 */
         #quiz-section { display: none; }
-        #display-container {
-            width: 100%;
-            margin: 2rem 0;
-            min-height: 5rem;
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
-            gap: 8px;
-        }
+        #display-container { width: 100%; margin: 2rem 0; min-height: 5rem; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
         
         /* 每個字母的獨立方塊樣式 */
-        .char-box {
-            border-bottom: 4px solid var(--text);
-            width: 25px;
-            height: 45px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2.5rem;
-            font-family: 'Arial', sans-serif;
-            font-weight: bold;
-        }
+        .char-box { border-bottom: 4px solid var(--text); width: 25px; height: 45px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; font-family: 'Arial', sans-serif; font-weight: bold; }
         
         /* 大按鈕與語速控制樣式 */
         .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
@@ -61,8 +51,19 @@
 <body>
 
 <div class="card" id="upload-section">
-    <h2>📷 第一步：上傳照片 (v0.1)</h2>
+    <h2>📷 第一步：上傳照片 <span style="font-size: 0.8rem; color: #aaa;">v0.2</span></h2>
     <input type="file" id="image-input" accept="image/*">
+    
+    <div id="preview-container">
+        <div class="preview-wrapper">
+            <img id="image-preview" src="" alt="預覽圖片">
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: center;">
+            <button class="btn-action bg-primary" onclick="rotateImage()">🔄 旋轉圖片</button>
+            <button class="btn-action bg-success" onclick="processImage()">✅ 確認並辨識</button>
+        </div>
+    </div>
+
     <div id="status" style="margin-top:20px; color:#666;">請選取單字圖片</div>
 </div>
 
@@ -75,17 +76,13 @@
 
 <div class="card" id="quiz-section">
     <div id="quiz-counter" style="text-align: right; color: #999; font-weight: bold;">1 / 1</div>
-    
     <div id="display-container"></div>
-    
     <div class="controls">
-        <!-- 語速調整區塊 -->
         <div class="speed-control">
             <span class="label">語速</span>
             <input type="range" id="speed-slider" min="0.3" max="1.5" step="0.1" value="0.7" oninput="document.getElementById('speed-label').innerText = parseFloat(this.value).toFixed(1)">
             <span class="label"><span id="speed-label">0.7</span>x</span>
         </div>
-
         <button class="btn-main btn-audio" onclick="playCurrentWord()">
             <span class="icon">📢</span><span class="label">發音</span>
         </button>
@@ -106,57 +103,87 @@
     let words = [];
     let currentIndex = 0;
     let isShowing = false;
+    let rotationAngle = 0;
 
-    // --- OCR 影像轉正與高準確率辨識 ---
-    document.getElementById('image-input').addEventListener('change', async (e) => {
+    document.getElementById('image-input').addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
         
-        const statusEl = document.getElementById('status');
-        statusEl.innerText = "準備辨識引擎...";
+        rotationAngle = 0;
+        const imgPreview = document.getElementById('image-preview');
+        imgPreview.src = URL.createObjectURL(file);
+        imgPreview.style.transform = `rotate(${rotationAngle}deg)`;
         
+        document.getElementById('preview-container').style.display = 'block';
+        document.getElementById('status').innerText = "請點擊「旋轉圖片」直到文字為正向，再按確認";
+    });
+
+    function rotateImage() {
+        rotationAngle = (rotationAngle + 90) % 360;
+        document.getElementById('image-preview').style.transform = `rotate(${rotationAngle}deg)`;
+    }
+
+    async function processImage() {
+        document.getElementById('status').innerText = "影像降維與辨識中，請稍候...";
+        const imgPreview = document.getElementById('image-preview');
+        
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        img.src = imgPreview.src;
+        await new Promise(r => img.onload = r);
+
+        // 1. 自動降維：避免高畫質原圖導致記憶體不足
+        const MAX_SIZE = 1500;
+        let scale = 1;
+        if (img.width > MAX_SIZE || img.height > MAX_SIZE) {
+            scale = Math.min(MAX_SIZE / img.width, MAX_SIZE / img.height);
+        }
+        const scaledWidth = img.width * scale;
+        const scaledHeight = img.height * scale;
+
+        if (rotationAngle === 90 || rotationAngle === 270) {
+            canvas.width = scaledHeight;
+            canvas.height = scaledWidth;
+        } else {
+            canvas.width = scaledWidth;
+            canvas.height = scaledHeight;
+        }
+
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.rotate((rotationAngle * Math.PI) / 180);
+        ctx.drawImage(img, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
+
         try {
-            // 建立 Worker，並加入 logger 監控進度
-            const worker = await Tesseract.createWorker('eng+osd', 1, {
-                logger: m => {
-                    if (m.status === 'recognizing text') {
-                        statusEl.innerText = `分析與轉正辨識中... ${Math.round(m.progress * 100)}%`;
-                    } else if (m.status === 'loading tesseract core' || m.status.includes('loading language')) {
-                        statusEl.innerText = `載入 AI 模型中...`;
-                    }
-                }
-            });
-
-            // 設定自動轉正模式 (不使用 whitelist，避免干擾 OSD 判斷)
+            const worker = await Tesseract.createWorker('eng');
+            
             await worker.setParameters({
-                tessedit_pageseg_mode: Tesseract.PSM.AUTO_OSD,
+                tessedit_char_whitelist: 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ \n\r',
+                // 2. 導入稀疏文字辨識模式，專門對付散落的單字卡
+                tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT, 
             });
 
-            const { data: { text } } = await worker.recognize(file);
+            const { data: { text } } = await worker.recognize(canvas);
             await worker.terminate();
 
-            // 利用 JS 進行二次過濾：將非大小寫英文字母與空白的字元全部刪除
-            const cleanText = text.replace(/[^a-zA-Z\s]/g, '');
-            
-            // 依照空白切割，並排除長度小於 2 的單字
-            words = cleanText.split(/\s+/).filter(w => w.length >= 2);
+            // 3. 改良過濾：先強制拔除所有非字母符號，再判斷長度，保留帶有筆跡雜訊的單字
+            words = text.split(/\s+/)
+                        .map(w => w.replace(/[^a-zA-Z]/g, '')) 
+                        .filter(w => w.length >= 2);
             
             if (words.length === 0) {
-                alert("未能辨識出任何有效單字，請確認圖片文字是否清晰。");
-                statusEl.innerText = "請重新選取圖片";
-                return;
+                throw new Error("未能提取出任何有效單字，請確認圖片已旋轉為正向且字體清晰。");
             }
-            
+
             renderWordList();
             document.getElementById('upload-section').style.display = 'none';
             document.getElementById('edit-section').style.display = 'block';
         } catch (err) { 
             alert("辨識失敗：" + err.message); 
-            statusEl.innerText = "請選取單字圖片";
+            document.getElementById('status').innerText = "辨識失敗，請重試";
         }
-    });
+    }
 
-    // --- 渲染單字列表 (包含修正與刪除按鈕) ---
     function renderWordList() {
         const list = document.getElementById('word-list');
         list.innerHTML = '';
@@ -199,7 +226,6 @@
         }
     }
 
-    // --- 測驗功能 ---
     function startQuiz() {
         const allInputs = document.querySelectorAll('.word-item input');
         words = Array.from(allInputs).map(i => i.value.trim()).filter(w => w !== "");
@@ -221,8 +247,6 @@
         const container = document.getElementById('display-container');
         container.innerHTML = '';
         const targetWord = words[currentIndex];
-        
-        // 針對長單字縮小方塊
         const boxWidth = targetWord.length > 10 ? 20 : 30;
 
         for (let i = 0; i < targetWord.length; i++) {
@@ -256,7 +280,6 @@
     function playCurrentWord() {
         const utterance = new SpeechSynthesisUtterance(words[currentIndex]);
         utterance.lang = 'en-US';
-        // 讀取拉桿的值來設定語速
         utterance.rate = parseFloat(document.getElementById('speed-slider').value);
         window.speechSynthesis.speak(utterance);
     }
@@ -264,6 +287,5 @@
     function nextWord() { if (currentIndex < words.length - 1) { currentIndex++; initQuizWord(); } }
     function prevWord() { if (currentIndex > 0) { currentIndex--; initQuizWord(); } }
 </script>
-
 </body>
 </html>
