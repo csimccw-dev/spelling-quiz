@@ -51,7 +51,7 @@
 <body>
 
 <div class="card" id="upload-section">
-    <h2>📷 第一步：上傳照片 <span style="font-size: 0.8rem; color: #aaa;">v0.3</span></h2>
+    <h2>📷 第一步：上傳照片 <span style="font-size: 0.8rem; color: #aaa;">v0.4</span></h2>
     <input type="file" id="image-input" accept="image/*">
     
     <div id="preview-container">
@@ -124,7 +124,7 @@
     }
 
     async function processImage() {
-        document.getElementById('status').innerText = "影像辨識中，解放內建字典校正...";
+        document.getElementById('status').innerText = "啟動稀疏文字解析模式，請稍候...";
         const imgPreview = document.getElementById('image-preview');
         
         const canvas = document.createElement('canvas');
@@ -133,7 +133,6 @@
         img.src = imgPreview.src;
         await new Promise(r => img.onload = r);
 
-        // 1. 提升畫布最大尺寸至 2000px，確保微距攝影的字母不會因壓縮過度而糊化
         const MAX_SIZE = 2000;
         let scale = 1;
         if (img.width > MAX_SIZE || img.height > MAX_SIZE) {
@@ -155,18 +154,26 @@
         ctx.drawImage(img, -scaledWidth / 2, -scaledHeight / 2, scaledWidth, scaledHeight);
 
         try {
-            // 2. 直接建立 eng 模型，不強加任何限制參數，讓 Tesseract 發揮上下文聯想能力
             const worker = await Tesseract.createWorker('eng');
+            
+            // 關鍵修正：套用 SPARSE_TEXT 模式，明確告知 AI 這是散落的單字網格
+            await worker.setParameters({
+                tessedit_pageseg_mode: Tesseract.PSM.SPARSE_TEXT,
+            });
             
             const { data: { text } } = await worker.recognize(canvas);
             await worker.terminate();
 
-            // 3. 改由 Javascript 進行精確的後處理
-            words = text.split(/\s+/)
-                        // 拔除所有不是英文字母的符號（例如打叉、句號、雜點）
-                        .map(w => w.replace(/[^a-zA-Z]/g, ''))
-                        // 過濾掉單個字元的孤兒字母（通常是雜訊）或空白
-                        .filter(w => w.length >= 2);
+            // 精確後處理
+            let rawWords = text.split(/\s+/)
+                               .map(w => w.replace(/[^a-zA-Z]/g, ''))
+                               .filter(w => w.length >= 2);
+                               
+            // 過濾掉可能因為紙張紋理產生的「全大寫」短雜訊 (例如 ERE, XH)，保留正常單字
+            rawWords = rawWords.filter(w => !(w === w.toUpperCase() && w.length < 4));
+            
+            // 移除重複出現的單字
+            words = [...new Set(rawWords)];
             
             if (words.length === 0) {
                 throw new Error("未能提取出任何有效單字，請確認圖片已旋轉為正向且字體清晰。");
